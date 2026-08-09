@@ -1,0 +1,27 @@
+tables:
+
+  orders:
+    source_table: orders
+    load_type: incremental
+    watermark_column: order_purchase_timestamp
+    chunk_size: 50000
+
+  customers:
+    source_table: customers
+    load_type: full
+    chunk_size: 50000
+
+  order_items:
+    source_table: order_items
+    load_type: full
+    chunk_size: 50000
+
+  products:
+    source_table: products
+    load_type: full
+    chunk_size: 50000
+
+  payments:
+    source_table: order_payments
+    load_type: full
+    chunk_size: 50000
