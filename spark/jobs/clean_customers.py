@@ -1,7 +1,9 @@
 from pyspark.sql import Window
 from pyspark.sql import functions as F
 
-from spark.utils.spark_session import get_spark_session
+from spark.utils.spark_session import (
+    get_spark_session,
+)
 from spark.utils.s3_paths import (
     bronze_path,
     silver_path,
@@ -13,53 +15,35 @@ from ingestion.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-VALID_ORDER_STATUSES = [
-    "delivered",
-    "shipped",
-    "canceled",
-    "cancelled",
-    "invoiced",
-    "processing",
-    "approved",
-    "unavailable",
-    "created",
-]
-
-
-TIMESTAMP_COLUMNS = [
-    "order_purchase_timestamp",
-    "order_approved_at",
-    "order_delivered_carrier_date",
-    "order_delivered_customer_date",
-    "order_estimated_delivery_date",
-]
-
-
-def clean_orders():
+def clean_customers():
     spark = get_spark_session(
-        app_name="CleanOrders"
+        app_name="CleanCustomers"
     )
 
     try:
+        # ---------------------------------------------------------
+        # 1. Define S3 paths
+        # ---------------------------------------------------------
+
         source_path = bronze_path(
-            "orders"
+            "customers"
         )
 
         target_path = silver_path(
-            "orders"
+            "customers"
         )
 
         reject_path = rejected_path(
-            "orders"
+            "customers"
         )
 
         logger.info(
-            "Reading Bronze orders from %s",
+            "Reading Bronze customers from %s",
             source_path,
         )
 
         # ---------------------------------------------------------
-        # 1. Read Bronze history
+        # 2. Read entire Bronze history
         # ---------------------------------------------------------
 
         bronze_df = (
@@ -70,92 +54,73 @@ def clean_orders():
         bronze_count = bronze_df.count()
 
         logger.info(
-            "Bronze order rows=%s",
+            "Bronze customer rows=%s",
             bronze_count,
         )
 
-        print()
         print(
             f"Bronze rows: {bronze_count}"
         )
 
         # ---------------------------------------------------------
-        # 2. Basic string normalization
+        # 3. Standardize customer fields
         # ---------------------------------------------------------
 
         cleaned_df = (
             bronze_df
-            .withColumn(
-                "order_id",
-                F.trim(
-                    F.col("order_id")
-                ),
-            )
+
+            # Trim IDs
             .withColumn(
                 "customer_id",
                 F.trim(
                     F.col("customer_id")
                 ),
             )
+
             .withColumn(
-                "order_status",
+                "customer_unique_id",
+                F.trim(
+                    F.col("customer_unique_id")
+                ),
+            )
+
+            # Normalize city
+            .withColumn(
+                "customer_city",
                 F.lower(
                     F.trim(
-                        F.col("order_status")
+                        F.col("customer_city")
                     )
                 ),
             )
-        )
 
-        # ---------------------------------------------------------
-        # 3. Standardize timestamp columns
-        # ---------------------------------------------------------
-
-        for column_name in TIMESTAMP_COLUMNS:
-            if column_name in cleaned_df.columns:
-                cleaned_df = (
-                    cleaned_df
-                    .withColumn(
-                        column_name,
-                        F.to_timestamp(
-                            F.col(column_name)
-                        ),
-                    )
-                )
-
-        # ---------------------------------------------------------
-        # 4. Normalize canceled/cancelled
-        # ---------------------------------------------------------
-
-        cleaned_df = (
-            cleaned_df
+            # Normalize state
             .withColumn(
-                "order_status",
-                F.when(
-                    F.col("order_status")
-                    == "cancelled",
-                    F.lit("canceled"),
-                ).otherwise(
-                    F.col("order_status")
+                "customer_state",
+                F.upper(
+                    F.trim(
+                        F.col("customer_state")
+                    )
                 ),
             )
-        )
 
-        # ---------------------------------------------------------
-        # 5. Validation rules
-        # ---------------------------------------------------------
-
-        invalid_order_id = (
-            F.col("order_id").isNull()
-            |
-            (
-                F.length(
-                    F.col("order_id")
-                ) == 0
+            # Keep ZIP as string
+            .withColumn(
+                "customer_zip_code_prefix",
+                F.col(
+                    "customer_zip_code_prefix"
+                ).cast("string"),
             )
         )
 
-        invalid_customer_id = (
+        # ---------------------------------------------------------
+        # 4. Identify invalid rows
+        #
+        # customer_id is our source primary key.
+        # customer_unique_id should also exist.
+        # ---------------------------------------------------------
+
+        invalid_condition = (
             F.col("customer_id").isNull()
             |
             (
@@ -163,29 +128,19 @@ def clean_orders():
                     F.col("customer_id")
                 ) == 0
             )
-        )
-
-        invalid_status = (
-            F.col("order_status").isNull()
+            |
+            F.col(
+                "customer_unique_id"
+            ).isNull()
             |
             (
-                ~F.col("order_status").isin(
-                    VALID_ORDER_STATUSES
-                )
+                F.length(
+                    F.col(
+                        "customer_unique_id"
+                    )
+                ) == 0
             )
         )
-
-        invalid_condition = (
-            invalid_order_id
-            |
-            invalid_customer_id
-            |
-            invalid_status
-        )
-
-        # ---------------------------------------------------------
-        # 6. Rejected records
-        # ---------------------------------------------------------
 
         rejected_df = (
             cleaned_df
@@ -195,34 +150,38 @@ def clean_orders():
             .withColumn(
                 "_rejection_reason",
                 F.when(
-                    invalid_order_id,
+                    F.col(
+                        "customer_id"
+                    ).isNull(),
                     F.lit(
-                        "invalid_order_id"
+                        "customer_id_null"
                     ),
                 )
                 .when(
-                    invalid_customer_id,
+                    F.length(
+                        F.col(
+                            "customer_id"
+                        )
+                    ) == 0,
                     F.lit(
-                        "invalid_customer_id"
+                        "customer_id_empty"
                     ),
                 )
                 .when(
-                    invalid_status,
+                    F.col(
+                        "customer_unique_id"
+                    ).isNull(),
                     F.lit(
-                        "invalid_order_status"
+                        "customer_unique_id_null"
                     ),
                 )
                 .otherwise(
                     F.lit(
-                        "unknown_validation_failure"
+                        "customer_unique_id_empty"
                     )
                 ),
             )
         )
-
-        # ---------------------------------------------------------
-        # 7. Valid records
-        # ---------------------------------------------------------
 
         valid_df = (
             cleaned_df
@@ -231,28 +190,24 @@ def clean_orders():
             )
         )
 
-        valid_before_dedup_count = (
-            valid_df.count()
-        )
-
         # ---------------------------------------------------------
-        # 8. Deduplicate Bronze history
+        # 5. Deduplicate
         #
-        # Keep latest ingestion for each order_id.
+        # Bronze contains multiple ingestion batches.
+        #
+        # Keep the newest version of each customer_id,
+        # based on _ingested_at.
         # ---------------------------------------------------------
 
-        order_window = (
+        customer_window = (
             Window
             .partitionBy(
-                "order_id"
+                "customer_id"
             )
             .orderBy(
                 F.col(
                     "_ingested_at"
-                ).desc(),
-                F.col(
-                    "_batch_id"
-                ).desc(),
+                ).desc()
             )
         )
 
@@ -261,7 +216,7 @@ def clean_orders():
             .withColumn(
                 "_row_number",
                 F.row_number().over(
-                    order_window
+                    customer_window
                 ),
             )
             .filter(
@@ -275,7 +230,7 @@ def clean_orders():
         )
 
         # ---------------------------------------------------------
-        # 9. Add Silver metadata
+        # 6. Add Silver metadata
         # ---------------------------------------------------------
 
         silver_df = (
@@ -295,8 +250,12 @@ def clean_orders():
         )
 
         # ---------------------------------------------------------
-        # 10. Metrics
+        # 7. Metrics
         # ---------------------------------------------------------
+
+        valid_before_dedup_count = (
+            valid_df.count()
+        )
 
         rejected_count = (
             rejected_df.count()
@@ -311,49 +270,48 @@ def clean_orders():
             - silver_count
         )
 
-        print()
-        print(
-            "Order transformation summary"
-        )
-        print(
-            "----------------------------"
-        )
-        print(
-            f"Bronze rows            : {bronze_count}"
-        )
-        print(
-            f"Valid before dedup     : {valid_before_dedup_count}"
-        )
-        print(
-            f"Duplicates removed     : {duplicates_removed}"
-        )
-        print(
-            f"Rejected rows          : {rejected_count}"
-        )
-        print(
-            f"Silver rows            : {silver_count}"
-        )
-
         logger.info(
-            "Orders metrics "
-            "bronze=%s "
-            "valid_before_dedup=%s "
-            "duplicates_removed=%s "
-            "rejected=%s "
-            "silver=%s",
+            "Customer transformation metrics "
+            "bronze=%s valid_before_dedup=%s "
+            "silver=%s rejected=%s "
+            "duplicates_removed=%s",
             bronze_count,
             valid_before_dedup_count,
-            duplicates_removed,
-            rejected_count,
             silver_count,
+            rejected_count,
+            duplicates_removed,
+        )
+
+        print()
+        print("Customer transformation summary")
+        print("--------------------------------")
+        print(
+            f"Bronze rows            : "
+            f"{bronze_count}"
+        )
+        print(
+            f"Valid before dedup      : "
+            f"{valid_before_dedup_count}"
+        )
+        print(
+            f"Duplicates removed      : "
+            f"{duplicates_removed}"
+        )
+        print(
+            f"Rejected rows           : "
+            f"{rejected_count}"
+        )
+        print(
+            f"Silver rows             : "
+            f"{silver_count}"
         )
 
         # ---------------------------------------------------------
-        # 11. Write Silver
+        # 8. Write Silver customers
         # ---------------------------------------------------------
 
         logger.info(
-            "Writing Silver orders to %s",
+            "Writing Silver customers to %s",
             target_path,
         )
 
@@ -370,13 +328,13 @@ def clean_orders():
         )
 
         # ---------------------------------------------------------
-        # 12. Write rejected rows if present
+        # 9. Write rejected records only if they exist
         # ---------------------------------------------------------
 
         if rejected_count > 0:
 
             logger.info(
-                "Writing rejected orders to %s",
+                "Writing rejected customer rows to %s",
                 reject_path,
             )
 
@@ -395,56 +353,43 @@ def clean_orders():
         else:
 
             logger.info(
-                "No rejected order records"
+                "No rejected customer records found"
             )
 
         # ---------------------------------------------------------
-        # 13. Display schema/sample
+        # 10. Display result
         # ---------------------------------------------------------
 
         print()
-        print(
-            "Silver orders schema:"
-        )
+        print("Silver schema:")
 
         silver_df.printSchema()
 
         print()
-        print(
-            "Silver orders sample:"
-        )
-
-        columns_to_show = [
-            "order_id",
-            "customer_id",
-            "order_status",
-            "order_purchase_timestamp",
-            "_ingested_at",
-            "_silver_processed_at",
-        ]
-
-        existing_columns = [
-            column
-            for column in columns_to_show
-            if column in silver_df.columns
-        ]
+        print("Silver sample:")
 
         silver_df.select(
-            *existing_columns
+            "customer_id",
+            "customer_unique_id",
+            "customer_zip_code_prefix",
+            "customer_city",
+            "customer_state",
+            "_ingested_at",
+            "_silver_processed_at",
         ).show(
             10,
             truncate=False,
         )
 
         logger.info(
-            "Orders Silver transformation "
+            "Customer Silver transformation "
             "completed successfully"
         )
 
     except Exception:
 
         logger.exception(
-            "Orders Silver transformation failed"
+            "Customer Silver transformation failed"
         )
 
         raise
@@ -459,5 +404,6 @@ def clean_orders():
 
 
 if __name__ == "__main__":
-    clean_orders()
+    clean_customers()
+
 
