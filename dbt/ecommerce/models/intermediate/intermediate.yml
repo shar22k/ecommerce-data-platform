@@ -1,0 +1,53 @@
+version: 2
+
+models:
+
+  - name: int_order_items_aggregated
+    description: >
+      Aggregates ecommerce order item records to one row per order.
+      This model prevents row multiplication when order-level facts
+      are joined with payment and customer data.
+
+    columns:
+
+      - name: order_id
+        description: "Unique identifier for the order."
+        data_tests:
+          - not_null
+          - unique
+
+      - name: total_items
+        description: "Total number of line items in the order."
+        data_tests:
+          - not_null
+
+      - name: distinct_products
+        description: "Number of distinct products in the order."
+
+      - name: distinct_sellers
+        description: "Number of distinct sellers participating in the order."
+
+      - name: total_item_value
+        description: "Sum of item prices for the order."
+
+      - name: total_freight_value
+        description: "Total freight amount associated with the order."
+
+      - name: total_order_value
+        description: >
+          Total merchandise value plus freight value for the order.
+
+      - name: minimum_item_price
+        description: "Lowest item price in the order."
+
+      - name: maximum_item_price
+        description: "Highest item price in the order."
+
+      - name: average_item_price
+        description: "Average item price for the order."
+
+      - name: first_shipping_limit_date
+        description: "Earliest shipping limit timestamp for the order."
+
+      - name: last_shipping_limit_date
+        description: "Latest shipping limit timestamp for the order."

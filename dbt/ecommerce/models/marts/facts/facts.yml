@@ -1,0 +1,108 @@
+version: 2
+
+models:
+
+  - name: fact_orders
+    description: >
+      Order-level fact table containing one row per order
+      with monetary, fulfillment, and item-level aggregates.
+
+    columns:
+
+      - name: order_id
+        description: "Primary key of the order fact."
+        data_tests:
+          - not_null
+          - unique
+
+      - name: customer_id
+        description: "Customer associated with the order."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_id
+
+      - name: order_date_key
+        description: "Foreign key to the date dimension."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+
+      - name: order_status
+        description: "Status of the ecommerce order."
+
+      - name: total_items
+        description: "Number of line items in the order."
+
+      - name: total_item_value
+        description: "Total merchandise amount."
+
+      - name: total_freight_value
+        description: "Total freight amount."
+
+      - name: total_order_value
+        description: >
+          Merchandise value plus freight for the order.
+
+      - name: delivery_days
+        description: >
+          Number of days between purchase and customer delivery.
+
+      - name: delivered_on_time
+        description: >
+          Indicates whether the order was delivered
+          on or before the estimated delivery date.
+
+
+  - name: fact_payments
+    description: >
+      Payment-level fact table containing one row
+      per order payment transaction.
+
+    columns:
+
+      - name: order_id
+        description: "Order associated with the payment."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fact_orders')
+                field: order_id
+
+      - name: payment_sequential
+        description: >
+          Sequence number identifying multiple payments
+          for the same order.
+        data_tests:
+          - not_null
+
+      - name: customer_id
+        description: "Customer associated with the payment."
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_id
+
+      - name: order_date_key
+        description: "Foreign key to the date dimension."
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+
+      - name: payment_type
+        description: "Payment method."
+
+      - name: payment_installments
+        description: "Number of payment installments."
+
+      - name: payment_value
+        description: "Payment amount."

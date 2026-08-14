@@ -1,0 +1,108 @@
+version: 2
+
+models:
+
+  - name: dim_customers
+    description: >
+      Customer dimension containing one current record
+      for each ecommerce customer.
+
+    columns:
+
+      - name: customer_id
+        description: "Primary key for the customer dimension."
+        data_tests:
+          - not_null
+          - unique
+
+      - name: customer_unique_id
+        description: >
+          Business-level customer identifier that may appear
+          across multiple customer records.
+        data_tests:
+          - not_null
+
+      - name: customer_zip_code_prefix
+        description: "Customer ZIP code prefix."
+
+      - name: customer_city
+        description: "Customer city."
+
+      - name: customer_state
+        description: "Customer state code."
+
+
+  - name: dim_products
+    description: >
+      Product dimension containing descriptive information
+      about ecommerce products.
+
+    columns:
+
+      - name: product_id
+        description: "Primary key for the product dimension."
+        data_tests:
+          - not_null
+          - unique
+
+      - name: product_category_name
+        description: "Product category."
+
+      - name: product_weight_g
+        description: "Product weight in grams."
+
+      - name: product_length_cm
+        description: "Product length in centimeters."
+
+      - name: product_height_cm
+        description: "Product height in centimeters."
+
+      - name: product_width_cm
+        description: "Product width in centimeters."
+
+
+  - name: dim_date
+    description: >
+      Calendar dimension used for analytical reporting
+      and time-based aggregations.
+
+    columns:
+
+      - name: date_key
+        description: "Surrogate-style date key in YYYYMMDD format."
+        data_tests:
+          - not_null
+          - unique
+
+      - name: date_day
+        description: "Calendar date."
+        data_tests:
+          - not_null
+          - unique
+
+      - name: year
+        description: "Calendar year."
+
+      - name: quarter
+        description: "Calendar quarter."
+
+      - name: month
+        description: "Calendar month number."
+
+      - name: month_name
+        description: "Calendar month name."
+
+      - name: week_of_year
+        description: "ISO-style week number."
+
+      - name: day_of_month
+        description: "Day of month."
+
+      - name: day_of_week
+        description: "Day of week where Monday is 1."
+
+      - name: day_name
+        description: "Name of the weekday."
+
+      - name: is_weekend
+        description: "Indicates whether the date falls on a weekend."
