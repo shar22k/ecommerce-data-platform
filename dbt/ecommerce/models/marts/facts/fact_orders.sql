@@ -1,13 +1,47 @@
+{{
+    config(
+        materialized='incremental',
+        unique_key='order_id',
+        incremental_strategy='merge',
+        on_schema_change='sync_all_columns'
+    )
+}}
+
 with orders as (
 
-    select *
+    select
+        order_id,
+        customer_id,
+        order_status,
+        order_purchase_timestamp,
+        order_approved_at,
+        order_delivered_carrier_date,
+        order_delivered_customer_date,
+        order_estimated_delivery_date
     from {{ ref('stg_orders') }}
+
+    {% if is_incremental() %}
+
+    where order_purchase_timestamp >= (
+        select coalesce(
+            max(order_purchase_timestamp),
+            '1900-01-01'::timestamp_ntz
+        )
+        from {{ this }}
+    )
+
+    {% endif %}
 
 ),
 
 order_items as (
 
-    select *
+    select
+        order_id,
+        total_items,
+        total_item_value,
+        total_freight_value,
+        total_order_value
     from {{ ref('int_order_items_aggregated') }}
 
 ),
@@ -20,65 +54,27 @@ final as (
 
         to_number(
             to_char(
-                o.order_purchase_timestamp::date,
+                cast(o.order_purchase_timestamp as date),
                 'YYYYMMDD'
             )
         ) as order_date_key,
 
         o.order_status,
-
         o.order_purchase_timestamp,
         o.order_approved_at,
         o.order_delivered_carrier_date,
         o.order_delivered_customer_date,
         o.order_estimated_delivery_date,
 
-        oi.total_items,
-        oi.distinct_products,
-        oi.distinct_sellers,
-
-        oi.total_item_value,
-        oi.total_freight_value,
-        oi.total_order_value,
-
-        oi.minimum_item_price,
-        oi.maximum_item_price,
-        oi.average_item_price,
-
-        oi.first_shipping_limit_date,
-        oi.last_shipping_limit_date,
-
-        datediff(
-            day,
-            o.order_purchase_timestamp,
-            o.order_delivered_customer_date
-        ) as delivery_days,
-
-        datediff(
-            day,
-            o.order_purchase_timestamp,
-            o.order_estimated_delivery_date
-        ) as estimated_delivery_days,
-
-        case
-            when
-                o.order_delivered_customer_date is not null
-                and o.order_estimated_delivery_date is not null
-                and o.order_delivered_customer_date
-                    <= o.order_estimated_delivery_date
-            then true
-            else false
-        end as delivered_on_time,
-
-        o._ingested_at,
-        o._batch_id,
-        o._source_system,
-        o._silver_processed_at
+        coalesce(i.total_items, 0) as total_items,
+        coalesce(i.total_item_value, 0) as total_item_value,
+        coalesce(i.total_freight_value, 0) as total_freight_value,
+        coalesce(i.total_order_value, 0) as total_order_value
 
     from orders o
 
-    left join order_items oi
-        on o.order_id = oi.order_id
+    left join order_items i
+        on o.order_id = i.order_id
 
 )
 
