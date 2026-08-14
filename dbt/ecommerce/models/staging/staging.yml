@@ -1,0 +1,163 @@
+version: 2
+
+models:
+
+  - name: stg_customers
+    description: "Cleaned customer records from the Snowflake RAW layer."
+
+    columns:
+      - name: customer_id
+        description: "Unique identifier for a customer record."
+        data_tests:
+          - not_null
+          - unique
+
+      - name: customer_unique_id
+        description: "Identifier representing the real customer across purchases."
+        data_tests:
+          - not_null
+
+      - name: customer_zip_code_prefix
+        description: "Customer ZIP code prefix."
+
+      - name: customer_city
+        description: "Customer city."
+
+      - name: customer_state
+        description: "Customer state code."
+
+
+  - name: stg_orders
+    description: "Cleaned ecommerce orders."
+
+    columns:
+      - name: order_id
+        description: "Unique identifier for an order."
+        data_tests:
+          - not_null
+          - unique
+
+      - name: customer_id
+        description: "Customer associated with the order."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+
+      - name: order_status
+        description: "Current order status."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - approved
+                  - canceled
+                  - created
+                  - delivered
+                  - invoiced
+                  - processing
+                  - shipped
+                  - unavailable
+
+
+  - name: stg_order_items
+    description: "Individual products associated with ecommerce orders."
+
+    columns:
+      - name: order_id
+        description: "Order associated with the line item."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_orders')
+                field: order_id
+
+      - name: order_item_id
+        description: "Sequence number of an item within an order."
+        data_tests:
+          - not_null
+
+      - name: product_id
+        description: "Product associated with the order item."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_products')
+                field: product_id
+
+      - name: seller_id
+        description: "Seller responsible for the order item."
+
+      - name: price
+        description: "Price of the product."
+
+      - name: freight_value
+        description: "Freight cost associated with the item."
+
+
+  - name: stg_order_payments
+    description: "Payment transactions associated with ecommerce orders."
+
+    columns:
+      - name: order_id
+        description: "Order associated with the payment."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_orders')
+                field: order_id
+
+      - name: payment_sequential
+        description: "Sequence number for multiple payments on an order."
+        data_tests:
+          - not_null
+
+      - name: payment_type
+        description: "Payment method used."
+
+      - name: payment_installments
+        description: "Number of installments."
+
+      - name: payment_value
+        description: "Payment amount."
+
+
+  - name: stg_products
+    description: "Cleaned ecommerce product catalog."
+
+    columns:
+      - name: product_id
+        description: "Unique identifier for a product."
+        data_tests:
+          - not_null
+          - unique
+
+      - name: product_category_name
+        description: "Product category."
+
+      - name: product_name_length
+        description: "Length of the product name."
+
+      - name: product_description_length
+        description: "Length of the product description."
+
+      - name: product_photos_qty
+        description: "Number of product photos."
+
+      - name: product_weight_g
+        description: "Product weight in grams."
+
+      - name: product_length_cm
+        description: "Product length in centimeters."
+
+      - name: product_height_cm
+        description: "Product height in centimeters."
+
+      - name: product_width_cm
+        description: "Product width in centimeters."
