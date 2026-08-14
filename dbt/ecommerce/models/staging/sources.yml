@@ -1,0 +1,64 @@
+version: 2
+
+sources:
+  - name: ecommerce_raw
+    description: "Raw ecommerce tables loaded from the S3 Silver layer into Snowflake."
+
+    database: ECOMMERCE_DB
+    schema: RAW
+
+    tables:
+      - name: customers
+        description: "Raw customer records."
+        columns:
+          - name: customer_id
+            data_tests:
+              - not_null
+
+          - name: customer_unique_id
+            data_tests:
+              - not_null
+
+      - name: orders
+        description: "Raw ecommerce order records."
+        columns:
+          - name: order_id
+            data_tests:
+              - not_null
+
+          - name: customer_id
+            data_tests:
+              - not_null
+
+      - name: order_items
+        description: "Raw individual order line items."
+        columns:
+          - name: order_id
+            data_tests:
+              - not_null
+
+          - name: order_item_id
+            data_tests:
+              - not_null
+
+          - name: product_id
+            data_tests:
+              - not_null
+
+      - name: order_payments
+        description: "Raw payment records associated with orders."
+        columns:
+          - name: order_id
+            data_tests:
+              - not_null
+
+          - name: payment_sequential
+            data_tests:
+              - not_null
+
+      - name: products
+        description: "Raw ecommerce product records."
+        columns:
+          - name: product_id
+            data_tests:
+              - not_null
